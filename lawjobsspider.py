@@ -78,6 +78,9 @@ REF_REGEX = re.compile(r'\/(\d+)$')
 
 APPEND_GB = lambda x: x.strip() + ", GB"
 
+DOMAIN_NAME = "http://www.simplylawjobs.com"
+
+SUFFIX_OF_DOMAIN = "jobs?page="
 
 class SimplyLawJobs(CrawlSpider):
     """ Should navigate to the start_url, paginate through
@@ -101,4 +104,60 @@ class SimplyLawJobs(CrawlSpider):
     #----------------#
     #----------------#
 
+    """Navigating All Pages"""
+    def parse(self, response):
+        sel = HtmlXPathSelector(response)
+        sites = sel.select('//div[@id="pagination"]').extract()
+        pageNumbers = [i for i in re.findall(r'>(.*?)<',str(sites)) if i.isdigit()]
+        #l = ItemLoader(item=JobItem(), response=response)
+        pageNumbers = map(int, pageNumbers)
+        for page in xrange(min(pageNumbers)+1 , 3):  # instead of "3" use max(pagenumbers)+1
+						     #	for all pages job data 
+						 	
+            nextPage = urljoin(DOMAIN_NAME, SUFFIX_OF_DOMAIN+str(page))
+            yield Request(nextPage,callback=self.parseJobs)
 
+    """Extracting particular job data """
+    def parseJobs(self, response1):
+	jobItem = JobItem()
+        sel1 = HtmlXPathSelector(response1)
+        details1 = sel1.select('//div[@class="info font-size-small"]/a[@class]').extract()
+        details2 = sel1.select('//div[@class="info font-size-small"]/a/text()').extract() 
+        listOfStrings = [str(x) for x in details2]
+        listOfStrings = map(str.strip, listOfStrings)
+        jobtitle, company = listOfStrings[::2], listOfStrings[1::2]
+
+        uRL = []
+        jobID = []
+
+        lst =  re.findall(r'"(.*?)"',str(details1))
+        links = [item for item in lst if lst.count(item) == 1]
+        for link in links:
+            particularJobPage = urljoin("http://www.simplylawjobs.com", link)
+            url =  particularJobPage
+            uRL.append(url)
+            job_id = filter(None, particularJobPage.split("/"))[-1]
+            jobID.append(job_id.replace("?s=featured", ""))
+            yield Request(particularJobPage, callback=self.parseJobPage)
+
+	jobItem['title'] = jobtitle
+	jobItem['company'] = company
+	jobItem['url'] = uRL
+	jobItem['job_id'] = jobID
+	d =  dict(jobItem)
+	vv = []
+	kk = []
+	for key, value in d.iteritems():
+	    vv.append(value)	
+	    kk.append(key)
+
+	for i in range(len(vv[0])):
+	    for j in range(len(vv)):
+	    	print kk[j], ":", vv[j][i]
+	    print "******************************"
+	    print "******************************"
+		
+    """for Extracting job description"""
+    def parseJobPage(self, response2):
+        sel2 = HtmlXPathSelector(response2)
+        title = sel2.select('//div[@class="columns small-12 medium-4 large-4 details"]/text()').extract()
